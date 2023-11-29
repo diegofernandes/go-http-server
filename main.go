@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -18,7 +20,10 @@ import (
 	"github.com/brianvoe/gofakeit/v6"
 )
 
-var port = flag.Int("port", 8080, "listerner port")
+var (
+	port   = flag.Int("port", 8080, "listerner port")
+	logger = flag.Bool("logger", false, "enable log requests")
+)
 
 var serverIsHealthy atomic.Bool
 
@@ -78,6 +83,48 @@ func greet(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func fileHandler(w http.ResponseWriter, r *http.Request) {
+
+	vars := mux.Vars(r)
+
+	filenName := vars["name"]
+
+	sizeParam := r.URL.Query().Get("size")
+
+	size, err := strconv.Atoi(sizeParam)
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("error:", err)
+		size = 1
+	}
+
+	w.Header().Set("Content-Disposition", "attachment; filename="+filenName)
+	w.Header().Set("Content-Type", "image/jpeg")
+
+	c := 10
+
+	for i := 0; i < size; i++ {
+		b := make([]byte, c)
+		_, err := rand.Read(b)
+		if err != nil {
+			log.Println("error:", err)
+			return
+		}
+		w.Write(b)
+	}
+
+	w.WriteHeader(http.StatusOK)
+
+}
+
+func simpleHandler(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	fmt.Fprint(w, `{"name":"teste"}`)
+}
+
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	// Check the health of the server and return a status code accordingly
 	if serverIsHealthy.Load() {
@@ -126,6 +173,10 @@ func main() {
 	mux.HandleFunc("/healthcheck/fail", healthFailHandler).Methods("POST")
 	mux.HandleFunc("/healthcheck/ok", healthOkHandler).Methods("POST")
 	mux.HandleFunc("/", greet).Methods("GET")
+
+	mux.HandleFunc("/file/{name}", fileHandler).Methods("GET")
+
+	mux.HandleFunc("/simple", simpleHandler).Methods("GET")
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", *port),
