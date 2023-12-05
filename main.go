@@ -167,7 +167,9 @@ func main() {
 
 	mux := mux.NewRouter()
 
-	mux.Use(logRequest)
+	if *logger {
+		mux.Use(logRequest)
+	}
 
 	mux.HandleFunc("/healthcheck", healthHandler).Methods("GET")
 	mux.HandleFunc("/healthcheck/fail", healthFailHandler).Methods("POST")
